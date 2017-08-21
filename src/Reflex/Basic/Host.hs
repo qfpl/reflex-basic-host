@@ -29,30 +29,30 @@ type BasicGuest t m a =
   , Ref (HostFrame t) ~ Ref IO
   , MonadIO (HostFrame t)
   , PrimMonad (HostFrame t)
-  ) => TriggerEventT t (PostBuildT t (PerformEventT t m)) a
+  ) => PostBuildT t (TriggerEventT t (PerformEventT t m)) a
 
 basicHost :: (forall t m. BasicGuest t m a) -> IO a
 basicHost guest = do
-  events <- newChan
-  (res, fc) <- runSpiderHost $ do
-    (eOpen, eOpenRef) <- newEventWithTriggerRef
+  events <- liftIO newChan
 
-    (res, fc) <- hostPerformEventT . flip runPostBuildT eOpen . flip runTriggerEventT events $ guest
+  (a, fc@(FireCommand fire)) <- liftIO $ runSpiderHost $ do
+    ((a, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ do
+      (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+      a <- runTriggerEventT (runPostBuildT guest postBuild) events
+      pure (a, postBuildTriggerRef)
+    mPostBuildTrigger <- readRef postBuildTriggerRef
+    forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
+    pure (a, fc)
 
-    mTriggerO <- liftIO . readIORef $ eOpenRef
-    forM_ mTriggerO $ \t ->
-      runFireCommand fc [t :=> Identity ()] (return ())
-
-    return (res, fc)
-
-  -- this comes directly from reflex-dom, could potentially be brought across into reflex (probably in TriggerEvent.Base)
-  void . forkIO . forever $ do
+  void . liftIO . forkIO . forever $ do
     ers <- readChan events
-    runSpiderHost $ do
+    _ <- runSpiderHost $ do
       mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
         me <- readIORef er
         return $ fmap (\e -> e :=> Identity a) me
-      _ <- runFireCommand fc (catMaybes mes) $ return ()
+      _ <- fire (catMaybes mes) $ return ()
       liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
+    pure ()
 
-  return res
+  pure a
+
