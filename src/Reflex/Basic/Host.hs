@@ -29,6 +29,7 @@ type BasicGuest t m a =
   , Ref (HostFrame t) ~ Ref IO
   , MonadIO (HostFrame t)
   , PrimMonad (HostFrame t)
+  , MonadIO m
   ) => PostBuildT t (TriggerEventT t (PerformEventT t m)) a
 
 basicHost :: (forall t m. BasicGuest t m a) -> IO a
