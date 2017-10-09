@@ -15,6 +15,7 @@ import Data.Maybe (catMaybes)
 import Control.Monad.Trans (MonadIO(..))
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Ref (MonadRef(..))
+import Control.Monad.Fix (MonadFix)
 import Data.IORef (readIORef)
 
 import Data.Dependent.Sum
@@ -30,6 +31,7 @@ type BasicGuest t m a =
   , MonadIO (HostFrame t)
   , PrimMonad (HostFrame t)
   , MonadIO m
+  , MonadFix m
   ) => PostBuildT t (TriggerEventT t (PerformEventT t m)) a
 
 basicHost :: (forall t m. BasicGuest t m a) -> IO a
