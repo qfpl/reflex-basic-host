@@ -19,7 +19,10 @@ import Control.Monad.Trans (MonadIO(..))
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Ref (MonadRef(..))
 import Control.Monad.Fix (MonadFix)
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.IORef (readIORef)
+
+import Control.Monad.STM (atomically)
+import Control.Concurrent.STM.TVar (newTVar, writeTVar, readTVar)
 
 import Data.Dependent.Sum
 import Reflex
@@ -44,7 +47,7 @@ basicHostWithQuit :: (forall t m. BasicGuest t m (a, Event t ())) -> IO a
 basicHostWithQuit guest = do
   events <- liftIO newChan
 
-  rHasQuit <- liftIO $ newIORef False
+  tHasQuit <- liftIO . atomically $ newTVar False
 
   ((a, eQuit), FireCommand fire) <- liftIO $ runSpiderHost $ do
     (((a, eQuit), postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ do
@@ -58,7 +61,7 @@ basicHostWithQuit guest = do
     forM_ mPostBuildTrigger $ \postBuildTrigger -> do
       lmQuit <- fire [postBuildTrigger :=> Identity ()] $ readEvent hQuit >>= sequence
       when (any isJust lmQuit) $
-        liftIO $ writeIORef rHasQuit True
+        liftIO . atomically $ writeTVar tHasQuit True
 
     pure ((a, eQuit), fc)
 
@@ -66,7 +69,7 @@ basicHostWithQuit guest = do
 
   let
     loop = do
-      hasQuit <- liftIO $ readIORef rHasQuit
+      hasQuit <- liftIO . atomically $ readTVar tHasQuit
       if hasQuit
       then liftIO $ putMVar loopDone ()
       else do
@@ -79,7 +82,7 @@ basicHostWithQuit guest = do
 
           lmQuit <- fire (catMaybes mes) $ readEvent hQuit >>= sequence
           when (any isJust lmQuit) $
-            liftIO $ writeIORef rHasQuit True
+            liftIO . atomically $ writeTVar tHasQuit True
 
           liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
         loop
@@ -93,17 +96,17 @@ basicHostWithQuit guest = do
 repeatUntilQuit :: Event t () -> IO a -> BasicGuest t m ()
 repeatUntilQuit eQuit act = do
   ePostBuild <- getPostBuild
-  rHasQuit <- liftIO $ newIORef False
+  tHasQuit <- liftIO . atomically $ newTVar False
 
   let
     loop = do
-      hasQuit <- liftIO $ readIORef rHasQuit
+      hasQuit <- liftIO . atomically $ readTVar tHasQuit
       unless hasQuit $ do
         void act
         loop
 
   performEvent_ $ liftIO (void . forkIO $ loop) <$ ePostBuild
-  performEvent_ $ liftIO (writeIORef rHasQuit True) <$ eQuit
+  performEvent_ $ liftIO (atomically $ writeTVar tHasQuit True) <$ eQuit
 
   pure ()
 
