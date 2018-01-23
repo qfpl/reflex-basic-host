@@ -1,5 +1,5 @@
-{ mkDerivation, base, dependent-sum, mtl, primitive, ref-tf, reflex
-, stdenv, stm
+{ mkDerivation, async, base, dependent-sum, mtl, primitive, ref-tf
+, reflex, stdenv, stm
 }:
 mkDerivation {
   pname = "reflex-basic-host";
@@ -8,7 +8,7 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base dependent-sum mtl primitive ref-tf reflex stm
+    async base dependent-sum mtl primitive ref-tf reflex stm
   ];
   executableHaskellDepends = [ base mtl reflex ];
   license = stdenv.lib.licenses.bsd3;

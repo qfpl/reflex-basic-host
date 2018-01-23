@@ -10,7 +10,6 @@ module Reflex.Host.Basic (
 
 import Control.Monad (void, when, unless, forM_, forM)
 import Control.Concurrent (forkIO)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Chan (newChan, readChan)
 import Data.Functor.Identity (Identity(..))
 import Data.Maybe (catMaybes, isJust)
@@ -23,6 +22,7 @@ import Data.IORef (readIORef)
 
 import Control.Monad.STM (atomically)
 import Control.Concurrent.STM.TVar (newTVar, writeTVar, readTVar)
+import Control.Concurrent.Async (async, wait)
 
 import Data.Dependent.Sum
 import Reflex
@@ -65,14 +65,10 @@ basicHostWithQuit guest = do
 
     pure ((a, eQuit), fc)
 
-  loopDone <- liftIO newEmptyMVar
-
   let
     loop = do
       hasQuit <- liftIO . atomically $ readTVar tHasQuit
-      if hasQuit
-      then liftIO $ putMVar loopDone ()
-      else do
+      unless hasQuit $ do
         ers <- readChan events
         _ <- runSpiderHost $ do
           hQuit <- subscribeEvent eQuit
@@ -87,9 +83,8 @@ basicHostWithQuit guest = do
           liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
         loop
 
-  void . liftIO . forkIO $ loop
-
-  liftIO $ takeMVar loopDone
+  aLoop <- async loop
+  wait aLoop
 
   pure a
 
