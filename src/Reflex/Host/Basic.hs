@@ -22,7 +22,6 @@ import Data.IORef (readIORef)
 
 import Control.Monad.STM (atomically)
 import Control.Concurrent.STM.TVar (newTVar, writeTVar, readTVar)
-import Control.Concurrent.Async (async, wait)
 
 import Data.Dependent.Sum
 import Reflex
@@ -83,8 +82,7 @@ basicHostWithQuit guest = do
           liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
         loop
 
-  aLoop <- async loop
-  wait aLoop
+  void . liftIO $ loop
 
   pure a
 
