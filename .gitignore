@@ -1,2 +1,5 @@
 dist
+dist-newstyle
+cabal.project.local
 result
+.dir-locals.el
