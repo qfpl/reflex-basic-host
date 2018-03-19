@@ -18,11 +18,10 @@ import Control.Monad.Trans (MonadIO(..))
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Ref (MonadRef(..))
 import Control.Monad.Fix (MonadFix)
-import Data.IORef (readIORef)
+import Data.IORef (newIORef, readIORef, writeIORef)
 
 import Control.Monad.STM (atomically)
 import Control.Concurrent.STM.TVar (newTVar, writeTVar, readTVar)
-import Control.Concurrent.Async (async, wait)
 
 import Data.Dependent.Sum
 import Reflex
@@ -47,7 +46,7 @@ basicHostWithQuit :: (forall t m. BasicGuest t m (a, Event t ())) -> IO a
 basicHostWithQuit guest = do
   events <- liftIO newChan
 
-  tHasQuit <- liftIO . atomically $ newTVar False
+  rHasQuit <- liftIO $ newIORef False
 
   ((a, eQuit), FireCommand fire) <- liftIO $ runSpiderHost $ do
     (((a, eQuit), postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ do
@@ -61,13 +60,13 @@ basicHostWithQuit guest = do
     forM_ mPostBuildTrigger $ \postBuildTrigger -> do
       lmQuit <- fire [postBuildTrigger :=> Identity ()] $ readEvent hQuit >>= sequence
       when (any isJust lmQuit) $
-        liftIO . atomically $ writeTVar tHasQuit True
+        liftIO $ writeIORef rHasQuit True
 
     pure ((a, eQuit), fc)
 
   let
     loop = do
-      hasQuit <- liftIO . atomically $ readTVar tHasQuit
+      hasQuit <- liftIO $ readIORef rHasQuit
       unless hasQuit $ do
         ers <- readChan events
         _ <- runSpiderHost $ do
@@ -78,13 +77,12 @@ basicHostWithQuit guest = do
 
           lmQuit <- fire (catMaybes mes) $ readEvent hQuit >>= sequence
           when (any isJust lmQuit) $
-            liftIO . atomically $ writeTVar tHasQuit True
+            liftIO $ writeIORef rHasQuit True
 
           liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
         loop
 
-  aLoop <- async loop
-  wait aLoop
+  void . liftIO . forkIO $ loop
 
   pure a
 

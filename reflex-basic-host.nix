@@ -1,4 +1,4 @@
-{ mkDerivation, async, base, dependent-sum, mtl, primitive, ref-tf
+{ mkDerivation, base, dependent-sum, mtl, primitive, ref-tf
 , reflex, stdenv, stm
 }:
 mkDerivation {
@@ -8,7 +8,7 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    async base dependent-sum mtl primitive ref-tf reflex stm
+    base dependent-sum mtl primitive ref-tf reflex stm
   ];
   executableHaskellDepends = [ base mtl reflex ];
   license = stdenv.lib.licenses.bsd3;
