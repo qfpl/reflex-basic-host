@@ -40,10 +40,12 @@ type BasicGuest t m a =
   , MonadFix m
   ) => PostBuildT t (TriggerEventT t (PerformEventT t m)) a
 
-basicHostForever :: (forall t m. BasicGuest t m a) -> IO a
+basicHostForever :: (forall t m. BasicGuest t m a)
+                 -> IO a
 basicHostForever guest = basicHostWithQuit $ (\x -> (x, never)) <$> guest
 
-basicHostWithQuit :: (forall t m. BasicGuest t m (a, Event t ())) -> IO a
+basicHostWithQuit :: (forall t m. BasicGuest t m (a, Event t ()))
+                  -> IO a
 basicHostWithQuit guest = do
   events <- liftIO newChan
 
@@ -75,9 +77,8 @@ basicHostWithQuit guest = do
         ers <- readChan events
         _ <- runSpiderHost $ do
           hQuit <- subscribeEvent eQuit
-          mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation x _) -> do
-            me <- readIORef er
-            return $ fmap (\e -> e :=> Identity x) me
+          mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation x _) ->
+            fmap (\e -> e :=> Identity x) <$> readIORef er
 
           lmQuit <- fire (catMaybes mes) $ readEvent hQuit >>= sequence
           when (any isJust lmQuit) $
