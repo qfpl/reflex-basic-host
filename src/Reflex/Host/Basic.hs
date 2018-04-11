@@ -22,6 +22,7 @@ import Data.IORef (newIORef, readIORef, writeIORef)
 
 import Control.Monad.STM (atomically)
 import Control.Concurrent.STM.TVar (newTVar, writeTVar, readTVar)
+import Control.Concurrent.STM.TMVar (newEmptyTMVar, takeTMVar, putTMVar)
 
 import Data.Dependent.Sum
 import Reflex
@@ -64,10 +65,13 @@ basicHostWithQuit guest = do
 
     pure ((a, eQuit), fc)
 
+  done <- liftIO . atomically $ newEmptyTMVar
   let
     loop = do
       hasQuit <- liftIO $ readIORef rHasQuit
-      unless hasQuit $ do
+      if hasQuit
+      then liftIO . atomically $ putTMVar done ()
+      else do
         ers <- readChan events
         _ <- runSpiderHost $ do
           hQuit <- subscribeEvent eQuit
@@ -83,6 +87,7 @@ basicHostWithQuit guest = do
         loop
 
   void . liftIO . forkIO $ loop
+  void . liftIO . atomically . takeTMVar $ done
 
   pure a
 
