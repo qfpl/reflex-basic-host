@@ -12,10 +12,8 @@ import Reflex.Host.Basic
 
 main :: IO ()
 main = basicHostWithQuit $ mdo
-  -- ePostBuild <- getPostBuild
-  -- eLine <- performEventAsync $ (\fn -> liftIO $ fn =<< getLine) <$ leftmost [ePostBuild, void eMessage]
-  (eLine, onLine) <- newTriggerEvent
-  repeatUntilQuit eQuit (onLine =<< getLine)
+  ePostBuild <- getPostBuild
+  eLine <- performEventAsync $ (\fn -> liftIO $ fn =<< getLine) <$ leftmost [void eMessage, ePostBuild]
 
   let
     eMessage = ffilter (/= "quit") eLine
