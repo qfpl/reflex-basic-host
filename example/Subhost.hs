@@ -45,16 +45,6 @@ parseDel s =
       Nothing -> Nothing
     _ ->  Nothing
 
-subhostFn :: Dynamic t (Int, String) -> Event t () -> BasicGuest t m (Event t (), Event t ())
-subhostFn dv eQuit = do
-  (tick, line) <- sample . current $ dv
-
-  start <- liftIO getCurrentTime
-  eTick <- tickLossy (fromIntegral tick) start
-  performEvent_ $ liftIO (putStrLn line) <$ eTick
-
-  pure (never, eQuit)
-
 main :: IO ()
 main = basicHostWithQuit $ mdo
   (eLine, fireLine) <- newTriggerEvent
@@ -74,7 +64,15 @@ main = basicHostWithQuit $ mdo
   performEvent_ $ liftIO . putStrLn . ("Added with id: " ++) . show . fst <$> eIns
 
   dme <- listWithKey dMap $ \k dv -> do
-    (_ :: Event t (), eQuitSub) <- subhost subhostFn dv (void . ffilter (== k) $ eDel)
+    (_ :: Event t (), eQuitSub) <- subhost dv (void . ffilter (== k) $ eDel) $ \dv' eQuit' -> do
+      (tick, line) <- sample . current $ dv'
+
+      start <- liftIO getCurrentTime
+      eTick <- tickLossy (fromIntegral tick) start
+      performEvent_ $ liftIO (putStrLn line) <$ eTick
+
+      pure (never, eQuit')
+
     pure eQuitSub
 
   let

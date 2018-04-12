@@ -18,11 +18,11 @@ import Control.Concurrent (forkIO)
 import Reflex
 import Reflex.Host.Basic
 
-subhost :: (forall t1 m1. Dynamic t1 a -> Event t1 b -> BasicGuest t1 m1 (Event t1 c, Event t1 ()))
-        -> Dynamic t a
+subhost :: Dynamic t a
         -> Event t b
+        -> (forall t1 m1. Dynamic t1 a -> Event t1 b -> BasicGuest t1 m1 (Event t1 c, Event t1 ()))
         -> BasicGuest t m (Event t c, Event t ())
-subhost fn doA eoB = do
+subhost doA eoB fn = do
   (tAB, tCQ) <- liftIO . atomically $
     (,) <$> newEmptyTMVar <*> newEmptyTMVar
 
