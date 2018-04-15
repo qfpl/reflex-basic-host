@@ -1,8 +1,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Reflex.Host.Basic (
     BasicGuest
+  , BasicGuestConstraints
   , basicHostWithQuit
   , basicHostForever
   , repeatUntilQuit
@@ -14,7 +20,7 @@ import Control.Concurrent.Chan (newChan, readChan)
 import Data.Functor.Identity (Identity(..))
 import Data.Maybe (catMaybes, isJust)
 
-import Control.Monad.Trans (MonadIO(..))
+import Control.Monad.Trans (MonadIO(..), MonadTrans(..))
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Ref (MonadRef(..))
 import Control.Monad.Fix (MonadFix)
@@ -27,10 +33,12 @@ import Control.Concurrent.STM.TMVar (newEmptyTMVar, takeTMVar, putTMVar)
 import Data.Dependent.Sum
 import Reflex
 import Reflex.Host.Class
+import Reflex.NotReady.Class
 
-type BasicGuest t m a =
+type BasicGuestConstraints t (m :: * -> *) =
   ( MonadReflexHost t m
   , MonadHold t m
+  , MonadSample t m
   , Ref m ~ Ref IO
   , MonadRef (HostFrame t)
   , Ref (HostFrame t) ~ Ref IO
@@ -38,15 +46,79 @@ type BasicGuest t m a =
   , PrimMonad (HostFrame t)
   , MonadIO m
   , MonadFix m
-  ) => PostBuildT t (TriggerEventT t (PerformEventT t m)) a
+  )
 
-basicHostForever :: (forall t m. BasicGuest t m a)
+newtype BasicGuest t (m :: * -> *) a =
+  BasicGuest {
+    unBasicGuest :: PostBuildT t (TriggerEventT t (PerformEventT t m)) a
+  } deriving (Functor, Applicative, Monad, MonadFix)
+
+instance (MonadIO m, ReflexHost t, MonadIO (HostFrame t)) => MonadIO (BasicGuest t m) where
+  liftIO = BasicGuest . liftIO
+
+instance ReflexHost t => MonadSample t (BasicGuest t m) where
+  {-# INLINABLE sample #-}
+  sample = BasicGuest . lift . sample
+
+instance (ReflexHost t, MonadHold t m) => MonadHold t (BasicGuest t m) where
+  {-# INLINABLE hold #-}
+  hold v0 = BasicGuest . lift . hold v0
+  {-# INLINABLE holdDyn #-}
+  holdDyn v0 = BasicGuest . lift . holdDyn v0
+  {-# INLINABLE holdIncremental #-}
+  holdIncremental v0 = BasicGuest . lift . holdIncremental v0
+  {-# INLINABLE buildDynamic #-}
+  buildDynamic a0 = BasicGuest . lift . buildDynamic a0
+  {-# INLINABLE headE #-}
+  headE = BasicGuest . lift . headE
+
+instance (Reflex t, ReflexHost t) => PostBuild t (BasicGuest t m) where
+  {-# INLINABLE getPostBuild #-}
+  getPostBuild = BasicGuest getPostBuild
+
+instance (Reflex t, ReflexHost t, MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO) => TriggerEvent t (BasicGuest t m) where
+  {-# INLINABLE newTriggerEvent #-}
+  newTriggerEvent = BasicGuest $ lift newTriggerEvent
+  {-# INLINABLE newTriggerEventWithOnComplete #-}
+  newTriggerEventWithOnComplete = BasicGuest $ lift newTriggerEventWithOnComplete
+  {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
+  newEventWithLazyTriggerWithOnComplete = BasicGuest . lift . newEventWithLazyTriggerWithOnComplete
+
+instance (Reflex t, ReflexHost t, Ref m ~ Ref IO, MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO, MonadIO (HostFrame t), PrimMonad (HostFrame t), MonadIO m) => PerformEvent t (BasicGuest t m) where
+  type Performable (BasicGuest t m) = HostFrame t
+  {-# INLINABLE performEvent_ #-}
+  performEvent_ = BasicGuest . lift . lift . performEvent_
+  {-# INLINABLE performEvent #-}
+  performEvent = BasicGuest . lift . lift . performEvent
+
+instance (Reflex t, ReflexHost t, Ref m ~ Ref IO, MonadHold t m, PrimMonad (HostFrame t)) => Adjustable t (BasicGuest t m) where
+  {-# INLINABLE runWithReplace #-}
+  runWithReplace a0 a' =
+    BasicGuest $ runWithReplace (unBasicGuest a0) (fmap unBasicGuest a')
+  {-# INLINABLE traverseIntMapWithKeyWithAdjust #-}
+  traverseIntMapWithKeyWithAdjust f dm0 dm' = do
+    BasicGuest $ traverseIntMapWithKeyWithAdjust (\k v -> unBasicGuest (f k v)) dm0 dm'
+  {-# INLINABLE traverseDMapWithKeyWithAdjust #-}
+  traverseDMapWithKeyWithAdjust f dm0 dm' = do
+    BasicGuest $ traverseDMapWithKeyWithAdjust (\k v -> unBasicGuest (f k v)) dm0 dm'
+  {-# INLINABLE traverseDMapWithKeyWithAdjustWithMove #-}
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = do
+    BasicGuest $ traverseDMapWithKeyWithAdjustWithMove (\k v -> unBasicGuest (f k v)) dm0 dm'
+
+
+instance (ReflexHost t) => NotReady t (BasicGuest t m) where
+  {-# INLINABLE notReadyUntil #-}
+  notReadyUntil _ = pure ()
+  {-# INLINABLE notReady #-}
+  notReady = pure ()
+
+basicHostForever :: (forall t m. BasicGuestConstraints t m => BasicGuest t m a)
                  -> IO a
 basicHostForever guest = basicHostWithQuit $ (\x -> (x, never)) <$> guest
 
-basicHostWithQuit :: (forall t m. BasicGuest t m (a, Event t ()))
+basicHostWithQuit :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (a, Event t ()))
                   -> IO a
-basicHostWithQuit guest = do
+basicHostWithQuit (BasicGuest guest) = do
   events <- liftIO newChan
 
   rHasQuit <- liftIO $ newIORef False
@@ -92,7 +164,10 @@ basicHostWithQuit guest = do
 
   pure a
 
-repeatUntilQuit :: Event t () -> IO a -> BasicGuest t m ()
+repeatUntilQuit :: BasicGuestConstraints t m
+                => Event t ()
+                -> IO a
+                -> BasicGuest t m ()
 repeatUntilQuit eQuit act = do
   ePostBuild <- getPostBuild
   tHasQuit <- liftIO . atomically $ newTVar False
