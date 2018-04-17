@@ -11,7 +11,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Reflex.Host.Basic
                      , Reflex.Host.Subhost
-  build-depends:       base >=4.9 && <5
+  build-depends:       base >=4.9 && <4.12
                      , primitive >= 0.6 && < 0.7
                      , ref-tf >= 0.4 && < 0.5
                      , dependent-sum >= 0.4 && < 0.5
@@ -25,7 +25,7 @@ library
 
 executable example
   main-is:             Main.hs
-  build-depends:       base >=4.9 && <5
+  build-depends:       base >=4.9 && <4.12
                      , mtl >= 2.2 && < 2.3
                      , reflex >= 0.5 && < 0.6
                      , reflex-basic-host
@@ -35,7 +35,7 @@ executable example
 
 executable subhost
   main-is:             Subhost.hs
-  build-depends:       base >=4.9 && <5
+  build-depends:       base >=4.9 && <4.12
                      , mtl >= 2.2 && < 2.3
                      , containers >= 0.5 && < 0.6
                      , time >= 1.6 && < 1.7
