@@ -38,7 +38,7 @@ executable subhost
   build-depends:       base >=4.9 && <4.12
                      , mtl >= 2.2 && < 2.3
                      , containers >= 0.5 && < 0.6
-                     , time >= 1.6 && < 1.7
+                     , time >= 1.6 && < 1.10
                      , reflex >= 0.5 && < 0.6
                      , reflex-basic-host
   hs-source-dirs:      example
