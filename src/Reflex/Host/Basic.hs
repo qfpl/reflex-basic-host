@@ -6,6 +6,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Host.Basic (
     BasicGuest
   , BasicGuestConstraints
