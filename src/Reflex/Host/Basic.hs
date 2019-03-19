@@ -4,7 +4,7 @@ Copyright   : (c) 2019 Commonwealth Scientific and Industrial Research Organisat
 License     : BSD-3
 Maintainer  : dave.laing.80@gmail.com
 
-'BasicGuest' provides instances that nearly every reflex program needs:
+'BasicGuest' provides instances that most `reflex` programs need:
 
 * 'MonadIO'
 * 'MonadFix'
@@ -15,6 +15,9 @@ Maintainer  : dave.laing.80@gmail.com
 * 'PerformEvent' — @'Performable' ('BasicGuest' t m)@ has 'MonadIO'
 * 'TriggerEvent'
 * 'Adjustable'
+
+For some simple usage examples, see
+<https://github.com/qfpl/reflex-basic-host/tree/master/example the examples directory>
 
 -}
 
