@@ -9,5 +9,5 @@ For some simple usage examples, see
 
 Feel free to file an issue or pull request on Github, or contact us at:
 
-IRC - #qfpl on Freenode
-Email - <oᴉ˙ldɟb@llǝʞsɐɥ>
+* IRC - #qfpl on Freenode
+* Email - <oᴉ˙ldɟb@llǝʞsɐɥ>
