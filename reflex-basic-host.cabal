@@ -4,6 +4,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Dave Laing
 maintainer:          dave.laing.80@gmail.com
+copyright:           Copyright (c) 2019, Commonwealth Scientific and Industrial Research Organisation (CSIRO) ABN 41 687 119 230.
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
