@@ -1,3 +1,26 @@
+{-|
+Module      : Reflex.Host.Basic
+Copyright   : (c) 2019 Commonwealth Scientific and Industrial Research Organisation (CSIRO)
+License     : BSD-3
+Maintainer  : dave.laing.80@gmail.com
+
+'BasicGuest' provides instances that most `reflex` programs need:
+
+* 'MonadIO'
+* 'MonadFix'
+* 'MonadSample'
+* 'MonadHold'
+* 'NotReady'
+* 'PostBuild'
+* 'PerformEvent' — @'Performable' ('BasicGuest' t m)@ has 'MonadIO'
+* 'TriggerEvent'
+* 'Adjustable'
+
+For some simple usage examples, see
+<https://github.com/qfpl/reflex-basic-host/tree/master/example the examples directory>
+
+-}
+
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -113,10 +136,14 @@ instance (ReflexHost t) => NotReady t (BasicGuest t m) where
   {-# INLINABLE notReady #-}
   notReady = pure ()
 
+-- | Run a 'BasicGuest' without a quit 'Event'
 basicHostForever :: (forall t m. BasicGuestConstraints t m => BasicGuest t m a)
                  -> IO a
 basicHostForever guest = basicHostWithQuit $ (\x -> (x, never)) <$> guest
 
+-- | Run a 'BasicGuest'
+--
+-- The program will exit when the 'Event' returned by the 'BasicGuest' fires
 basicHostWithQuit :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (a, Event t ()))
                   -> IO a
 basicHostWithQuit (BasicGuest guest) = do
@@ -165,11 +192,34 @@ basicHostWithQuit (BasicGuest guest) = do
 
   pure a
 
+-- | Augment a 'BasicGuest' with an action that is repeatedly run until
+-- the provided event fires
+--
+-- Example - providing a \'tick\' 'Event' to a network
+--
+-- @
+-- myNetwork :: (Reflex t, MonadHold t m, MonadFix m) => Event t () -> m (Dynamic t Int)
+-- myNetwork eTick = count eTick
+--
+-- myGuest :: BasicGuestConstraints t m => BasicGuest t m ((), Event t ())
+-- myGuest = do
+--   (eTick, sendTick) <- newTriggerEvent
+--   dCount <- myNetwork eTick
+--   let
+--     eCountUpdated = updated dCount
+--     eQuit = () <$ ffilter (==5) eCountUpdated
+--   repeatUntilQuit eQuit (threadDelay 1000000 *> sendTick ())
+--   performEvent_ $ liftIO . print \<$\> eCountUpdated
+--   pure ((), eQuit)
+--
+-- main :: IO ()
+-- main = basicHostWithQuit myGuest
+-- @
 repeatUntilQuit :: BasicGuestConstraints t m
-                => Event t ()
-                -> IO a
+                => IO a -- ^ Action to repeatedly run
+                -> Event t () -- ^ 'Event' to stop the action
                 -> BasicGuest t m ()
-repeatUntilQuit eQuit act = do
+repeatUntilQuit act eQuit = do
   ePostBuild <- getPostBuild
   tHasQuit <- liftIO . atomically $ newTVar False
 
@@ -184,4 +234,3 @@ repeatUntilQuit eQuit act = do
   performEvent_ $ liftIO (atomically $ writeTVar tHasQuit True) <$ eQuit
 
   pure ()
-
