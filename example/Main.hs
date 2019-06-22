@@ -1,19 +1,16 @@
 {-# LANGUAGE RecursiveDo #-}
-module Main (
-    main
-  ) where
+module Main (main) where
 
-import Control.Monad (void)
-import Control.Monad.Trans (liftIO)
-
+import Control.Monad.IO.Class (liftIO)
+import Data.Functor (($>), void)
 import Reflex
-
-import Reflex.Host.Basic
+import Reflex.Host.Basic (basicHostWithQuit)
 
 main :: IO ()
 main = basicHostWithQuit $ mdo
   ePostBuild <- getPostBuild
-  eLine <- performEventAsync $ (\fn -> liftIO $ fn =<< getLine) <$ leftmost [void eMessage, ePostBuild]
+  eLine <- performEventAsync $ leftmost [void eMessage, ePostBuild] $> \fn ->
+    liftIO $ fn =<< getLine
 
   let
     eMessage = ffilter (/= "quit") eLine
