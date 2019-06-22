@@ -25,7 +25,6 @@ For some simple usage examples, see
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TupleSections              #-}
@@ -42,7 +41,7 @@ module Reflex.Host.Basic
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan (newChan, readChan)
-import Control.Concurrent.STM.TVar (newTVarIO, writeTVar, readTVar)
+import Control.Concurrent.STM.TVar (newTVarIO, writeTVar, readTVarIO)
 import Control.Monad (void, when, unless)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.Primitive (PrimMonad)
@@ -262,7 +261,7 @@ repeatUntilQuit act eQuit = do
 
   let
     loop = do
-      hasQuit <- atomically $ readTVar tHasQuit
+      hasQuit <- readTVarIO tHasQuit
       unless hasQuit $ void act *> loop
 
   performEvent_ $ liftIO (void $ forkIO loop) <$ ePostBuild
