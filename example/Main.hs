@@ -18,4 +18,4 @@ main = basicHostWithQuit $ mdo
 
   performEvent_ $ liftIO . putStrLn <$> eMessage
 
-  pure ((), eQuit)
+  pure (eQuit, ())
