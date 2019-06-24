@@ -36,10 +36,12 @@ module Reflex.Host.Basic
   , BasicGuestConstraints
   , basicHostWithQuit
   , basicHostForever
+  , asyncBasicHostWithQuit
   , repeatUntilQuit
   ) where
 
 import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 import Control.Concurrent.Chan (newChan, readChan)
 import Control.Concurrent.STM.TVar (newTVarIO, writeTVar, readTVarIO)
 import Control.Lens ((<&>))
@@ -174,64 +176,74 @@ basicHostForever
   -> IO a
 basicHostForever guest = basicHostWithQuit $ (never,) <$> guest
 
--- | Run a 'BasicGuest'.
---
--- The program will exit when the 'Event' returned by the 'BasicGuest' fires
+-- | Run a 'BasicGuest', and return when the 'Event' returned by the
+-- 'BasicGuest' fires.
 basicHostWithQuit
   :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t (), a))
   -> IO a
-basicHostWithQuit (BasicGuest guest) = do
-  performEventChan <- newChan
-  (postBuild, postBuildTriggerRef) <- runSpiderHost newEventWithTriggerRef
+basicHostWithQuit guest = do
+  resultVar <- newEmptyMVar
+  asyncBasicHostWithQuit (putMVar resultVar) guest
+  readMVar resultVar
+
+-- | Run a 'BasicGuest', but call the given callback with the result
+-- of network construction.
+--
+-- This is useful if you want to fork the event loop into its own
+-- thread, and need the result of network construction right away. You
+-- could use this to hand off event triggers to another thread. The
+-- callback will be called after the network is built, but just before
+-- the main loop starts.
+--
+-- This function terminates when the 'Event' returned by the
+-- 'BasicGuest' fires.
+asyncBasicHostWithQuit
+  :: (a -> IO ()) -- ^ Called with the result of network construction
+  -> (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t (), a))
+  -> IO ()
+asyncBasicHostWithQuit onBuild (BasicGuest guest) = runSpiderHost $ do
+  -- Unpack the guest, get the quit event, the result of building the
+  -- network, and a function to kick off each frame.
+  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+  performEventChan <- liftIO newChan
   rHasQuit <- newRef False -- When to shut down
+  ((eQuit, a), FireCommand fire) <- hostPerformEventT $
+    runTriggerEventT (runPostBuildT guest postBuild) performEventChan
 
-  -- Unpack the guest, get the result of its construction action and a
-  -- function to kick off each frame.
-  (runFrameAndCheckQuit, a) <- runSpiderHost $ do
-    ((eQuit, a), FireCommand fire) <- hostPerformEventT $
-      runTriggerEventT (runPostBuildT guest postBuild) performEventChan
+  hQuit <- subscribeEvent eQuit
+  let
+    runFrameAndCheckQuit firings = do
+      lmQuit <- fire firings $ readEvent hQuit >>= sequenceA
+      when (any isJust lmQuit) $ writeRef rHasQuit True
 
-    hQuit <- subscribeEvent eQuit
-    let
-      runFrameAndCheckQuit firings = do
-        lmQuit <- fire firings $ readEvent hQuit >>= sequenceA
-        when (any isJust lmQuit) $ writeRef rHasQuit True
+  liftIO $ onBuild a
 
-    pure (runFrameAndCheckQuit, a)
+  -- If anyone is listening to PostBuild, fire it
+  readRef postBuildTriggerRef
+    >>= traverse_ (\t -> runFrameAndCheckQuit [t ==> ()])
 
-  -- Run the network
-  runSpiderHost $ do
-    -- If anyone is listening to PostBuild, fire it
-    readRef postBuildTriggerRef
-      >>= traverse_ (\t -> runFrameAndCheckQuit [t ==> ()])
+  let
+    loop = do
+      hasQuit <- readRef rHasQuit
+      unless hasQuit $ do
+        eventsAndTriggers <- liftIO $ readChan performEventChan
 
-    -- Now kick off the main loop.
-    let
-      loop = do
-        hasQuit <- readRef rHasQuit
-        unless hasQuit $ do
-          eventsAndTriggers <- readChan performEventChan
+        let
+          prepareFiring
+            :: (MonadRef m, Ref m ~ Ref IO)
+            => DSum (EventTriggerRef t) TriggerInvocation
+            -> m (Maybe (DSum (EventTrigger t) Identity))
+          prepareFiring (EventTriggerRef er :=> TriggerInvocation x _)
+            = readRef er <&> fmap (==> x)
 
-          runSpiderHost $ do
-            let
-              prepareFiring
-                :: (MonadRef m, Ref m ~ Ref IO)
-                => DSum (EventTriggerRef t) TriggerInvocation
-                -> m (Maybe (DSum (EventTrigger t) Identity))
-              prepareFiring (EventTriggerRef er :=> TriggerInvocation x _)
-                = readRef er <&> fmap (==> x)
+        catMaybes <$> for eventsAndTriggers prepareFiring
+          >>= runFrameAndCheckQuit
 
-            catMaybes <$> for eventsAndTriggers prepareFiring
-              >>= runFrameAndCheckQuit
-
-            -- Fire callbacks for each event we triggered this frame
-            liftIO . for_ eventsAndTriggers $
-              \(_ :=> TriggerInvocation _ cb) -> cb
-        loop
-        pure ()
-
-    liftIO loop
-    pure a
+        -- Fire callbacks for each event we triggered this frame
+        liftIO . for_ eventsAndTriggers $
+          \(_ :=> TriggerInvocation _ cb) -> cb
+      loop
+  loop
 
 -- | Augment a 'BasicGuest' with an action that is repeatedly run until
 -- the provided event fires
