@@ -41,8 +41,8 @@ module Reflex.Host.Basic
   ) where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 import Control.Concurrent.Chan (newChan, readChan)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 import Control.Concurrent.STM.TVar (newTVarIO, writeTVar, readTVarIO)
 import Control.Lens ((<&>))
 import Control.Monad (void, when, unless)
@@ -191,9 +191,11 @@ basicHostWithQuit guest = do
 --
 -- This is useful if you want to fork the event loop into its own
 -- thread, and need the result of network construction right away. You
--- could use this to hand off event triggers to another thread. The
--- callback will be called after the network is built, but just before
--- the main loop starts.
+-- could use this to hand off event triggers to another thread, for
+-- example. The callback will be called after the network is built,
+-- but just before the event loop starts.
+--
+-- Each guest is run on a separate spider timeline.
 --
 -- This function terminates when the 'Event' returned by the
 -- 'BasicGuest' fires.
@@ -201,49 +203,52 @@ asyncBasicHostWithQuit
   :: (a -> IO ()) -- ^ Called with the result of network construction
   -> (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t (), a))
   -> IO ()
-asyncBasicHostWithQuit onBuild (BasicGuest guest) = runSpiderHost $ do
-  -- Unpack the guest, get the quit event, the result of building the
-  -- network, and a function to kick off each frame.
-  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  performEventChan <- liftIO newChan
-  rHasQuit <- newRef False -- When to shut down
-  ((eQuit, a), FireCommand fire) <- hostPerformEventT $
-    runTriggerEventT (runPostBuildT guest postBuild) performEventChan
+asyncBasicHostWithQuit onBuild guest =
+  withSpiderTimeline $ runSpiderHostForTimeline $ do
+    -- Unpack the guest, get the quit event, the result of building the
+    -- network, and a function to kick off each frame.
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    performEventChan <- liftIO newChan
+    rHasQuit <- newRef False -- When to shut down
+    ((eQuit, a), FireCommand fire) <- hostPerformEventT
+      . flip runTriggerEventT performEventChan
+      . flip runPostBuildT postBuild
+      $ unBasicGuest guest
 
-  hQuit <- subscribeEvent eQuit
-  let
-    runFrameAndCheckQuit firings = do
-      lmQuit <- fire firings $ readEvent hQuit >>= sequenceA
-      when (any isJust lmQuit) $ writeRef rHasQuit True
+    hQuit <- subscribeEvent eQuit
+    let
+      runFrameAndCheckQuit firings = do
+        lmQuit <- fire firings $ readEvent hQuit >>= sequenceA
+        when (any isJust lmQuit) $ writeRef rHasQuit True
 
-  liftIO $ onBuild a
+    liftIO $ onBuild a
 
-  -- If anyone is listening to PostBuild, fire it
-  readRef postBuildTriggerRef
-    >>= traverse_ (\t -> runFrameAndCheckQuit [t ==> ()])
+    -- If anyone is listening to PostBuild, fire it
+    readRef postBuildTriggerRef
+      >>= traverse_ (\t -> runFrameAndCheckQuit [t ==> ()])
 
-  let
-    loop = do
-      hasQuit <- readRef rHasQuit
-      unless hasQuit $ do
-        eventsAndTriggers <- liftIO $ readChan performEventChan
+    let
+      loop = do
+        hasQuit <- readRef rHasQuit
+        unless hasQuit $ do
+          eventsAndTriggers <- liftIO $ readChan performEventChan
 
-        let
-          prepareFiring
-            :: (MonadRef m, Ref m ~ Ref IO)
-            => DSum (EventTriggerRef t) TriggerInvocation
-            -> m (Maybe (DSum (EventTrigger t) Identity))
-          prepareFiring (EventTriggerRef er :=> TriggerInvocation x _)
-            = readRef er <&> fmap (==> x)
+          let
+            prepareFiring
+              :: (MonadRef m, Ref m ~ Ref IO)
+              => DSum (EventTriggerRef t) TriggerInvocation
+              -> m (Maybe (DSum (EventTrigger t) Identity))
+            prepareFiring (EventTriggerRef er :=> TriggerInvocation x _)
+              = readRef er <&> fmap (==> x)
 
-        catMaybes <$> for eventsAndTriggers prepareFiring
-          >>= runFrameAndCheckQuit
+          catMaybes <$> for eventsAndTriggers prepareFiring
+            >>= runFrameAndCheckQuit
 
-        -- Fire callbacks for each event we triggered this frame
-        liftIO . for_ eventsAndTriggers $
-          \(_ :=> TriggerInvocation _ cb) -> cb
-      loop
-  loop
+          -- Fire callbacks for each event we triggered this frame
+          liftIO . for_ eventsAndTriggers $
+            \(_ :=> TriggerInvocation _ cb) -> cb
+          loop
+    loop
 
 -- | Augment a 'BasicGuest' with an action that is repeatedly run until
 -- the provided event fires
