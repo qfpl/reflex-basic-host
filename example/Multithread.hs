@@ -1,6 +1,26 @@
 {-# language FlexibleContexts, TypeFamilies #-}
 module Main where
 
+{- |
+
+* Multithreaded Multi-Host Example
+
+This example boots two reflex networks which we will call "Left" and
+"Right". As they start, they each write an event trigger into an
+'MVar' and read an event trigger from another 'MVar', so that they can
+fire events into each other's network.
+
+Left and Right both log received lines to stdout. Left also reads
+lines from stdin, and lines are passed around as follows: Left passed
+incoming lines to Right, which immediately sends time a line comes in,
+it sends it to Right. Right immediately sends received lines back to
+Left.
+
+If "quit" is read from stdin, this triggers a shutdown of both FRP
+networks.
+
+-}
+
 import Prelude hiding (filter)
 import Data.Witherable (filter)
 import Control.Concurrent (forkIO)
@@ -16,59 +36,68 @@ left
   :: BasicGuestConstraints t m
   => MVar (String -> IO ())
   -> MVar (String -> IO ())
-  -> BasicGuest t m (Event t (), ())
+  -> BasicGuest t m (Event t ())
 left mTriggerLeft mTriggerRight = do
-  ePostBuild <- getPostBuild
+  -- Construct the event "lines from Right", and put its trigger in an MVar.
   (eFromRight, triggerLeft) <- newTriggerEvent
   liftIO $ putMVar mTriggerLeft triggerLeft
 
-  eTriggerRight <- performEvent $ ePostBuild $> liftIO (readMVar mTriggerRight)
-  eLines <- performEventAsync $ eTriggerRight $> \fire ->
+  -- Kick off a loop to read from stdin. Ignore exceptions for brevity.
+  ePostBuild <- getPostBuild
+  eLines <- performEventAsync $ ePostBuild $> \fire ->
     void . liftIO . forkIO . forever $ getLine >>= fire
 
-  bTriggerRight <- hold mempty eTriggerRight
-  let firings = bTriggerRight <@> eLines
-  performEvent_ $ liftIO <$> firings
+  -- Get the event trigger for the "lines from Left" event inside the
+  -- Right network, and fire it on each line.
+  triggerRight <- liftIO $ readMVar mTriggerRight
+  performEvent_ $ liftIO . triggerRight <$> eLines
 
+  -- Log events received from Right.
   performEvent_ $ eFromRight <&> \msg ->
     liftIO . putStrLn $ "From Right: " <> msg
 
-  pure (void $ filter (== "quit") eFromRight, ())
+  -- Quit if we get a "quit" from Right.
+  pure . void $ filter (== "quit") eFromRight
 
 right
   :: BasicGuestConstraints t m
   => MVar (String -> IO ())
   -> MVar (String -> IO ())
-  -> BasicGuest t m (Event t (), ())
+  -> BasicGuest t m (Event t ())
 right mTriggerLeft mTriggerRight = do
-  ePostBuild <- getPostBuild
+  -- Construct the event "lines from Left", and put its trigger in an MVar.
   (eFromLeft, triggerRight) <- newTriggerEvent
   liftIO $ putMVar mTriggerRight triggerRight
 
-  eTriggerLeft <- performEvent $ ePostBuild $> liftIO (readMVar mTriggerLeft)
-  bTriggerLeft <- hold mempty eTriggerLeft
-  let firings = bTriggerLeft <@> eFromLeft
-  performEvent_ $ liftIO <$> firings
+  -- Get the event trigger for the "lines from Left" event inside the
+  -- Right network, and fire it on each line.
+  triggerLeft <- liftIO $ readMVar mTriggerLeft
+  performEvent_ $ liftIO . triggerLeft <$> eFromLeft
 
+  -- Log events received from Left.
   performEvent_ $ eFromLeft <&> \msg ->
     liftIO . putStrLn $ "From Left: " <> msg
 
-  pure (void $ filter (== "quit") eFromLeft, ())
+  -- Quit if we get a "quit" from Left.
+  pure . void $ filter (== "quit") eFromLeft
 
 main :: IO ()
 main = do
+  -- Removing these type annotations causes type errors like "a0 is
+  -- untouchable".
   mTriggerLeft <- newEmptyMVar :: IO (MVar (String -> IO ()))
   mTriggerRight <- newEmptyMVar :: IO (MVar (String -> IO ()))
 
   mLeftDone <- newEmptyMVar
   mRightDone <- newEmptyMVar
 
+  -- Not exception-safe, for brevity's sake.
   void . forkIO $ do
-    () <- basicHostWithQuit (left mTriggerLeft mTriggerRight)
+    basicHostWithQuit (left mTriggerLeft mTriggerRight)
     putMVar mLeftDone ()
 
   void . forkIO $ do
-    () <- basicHostWithQuit (right mTriggerLeft mTriggerRight)
+    basicHostWithQuit (right mTriggerLeft mTriggerRight)
     putMVar mRightDone ()
 
   -- Wait for both threads

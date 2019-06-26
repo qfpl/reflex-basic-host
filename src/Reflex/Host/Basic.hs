@@ -169,30 +169,35 @@ instance ReflexHost t => NotReady t (BasicGuest t m) where
   notReady = pure ()
 
 -- | Run a 'BasicGuest' without a quit 'Event'.
+--
+-- @
+-- basicHostForever guest = 'basicHostWithQuit' $ never <$ guest
+-- @
 basicHostForever
-  :: (forall t m. BasicGuestConstraints t m => BasicGuest t m a)
-  -> IO a
-basicHostForever guest = basicHostWithQuit $ (never,) <$> guest
+  :: (forall t m. BasicGuestConstraints t m => BasicGuest t m ())
+  -> IO ()
+basicHostForever guest = basicHostWithQuit $ never <$ guest
 
 -- | Run a 'BasicGuest', and return when the 'Event' returned by the
 -- 'BasicGuest' fires.
 --
--- Each guest is run on a separate spider timeline, so you can launch
--- multiple hosts via 'Control.Concurrent.forkIO' and they will not
--- mutex each other.
+-- Each call runs on a separate spider timeline, so you can launch
+-- multiple hosts via 'Control.Concurrent.forkIO' or
+-- 'Control.Concurrent.forkOS' and they will not mutex each other.
 --
--- NOTE: You won't see the returned @a@ until after the host
--- terminates. If you want to capture the result of a build before the
--- network starts firing (e.g., to hand off event triggers to another
--- thread), populate an 'MVar' as you build the network.
---
--- NOTE 2: Type inference has trouble unifying into the @a@ variable
--- inside the @BasicGuest t m (Event t (), a)@. You may have to add
--- more explicit pattern-matches than you are used to. For an example
--- of this, see the @multithread@ example in this repository.
+-- NOTE: If you want to capture values from a build before the network
+-- starts firing (e.g., to hand off event triggers to another thread),
+-- populate an 'Control.Concurrent.MVar' (if threading) or
+-- 'Data.IORef.IORef' as you build the network. If you receive errors
+-- about untouchable type variables while doing this, add type
+-- annotations to constrain the 'Control.Concurrent.MVar' or
+-- 'Data.IORef.IORef' contents before passing them to the function
+-- that returns your 'BasicGuest'. See the @Multithread.hs@ example
+-- for a demonstration of this pattern, and where to put the type
+-- annotations.
 basicHostWithQuit
-  :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t (), a))
-  -> IO a
+  :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t ()))
+  -> IO ()
 basicHostWithQuit guest = do
   withSpiderTimeline $ runSpiderHostForTimeline $ do
     -- Unpack the guest, get the quit event, the result of building the
@@ -200,7 +205,7 @@ basicHostWithQuit guest = do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     triggerEventChan <- liftIO newChan
     rHasQuit <- newRef False -- When to shut down
-    ((eQuit, a), FireCommand fire) <- hostPerformEventT
+    (eQuit, FireCommand fire) <- hostPerformEventT
       . flip runTriggerEventT triggerEventChan
       . flip runPostBuildT postBuild
       $ unBasicGuest guest
@@ -237,7 +242,6 @@ basicHostWithQuit guest = do
             \(_ :=> TriggerInvocation _ cb) -> cb
           loop
     loop
-    pure a
 
 -- | Augment a 'BasicGuest' with an action that is repeatedly run until
 -- the provided event fires
