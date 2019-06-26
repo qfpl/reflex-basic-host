@@ -21,14 +21,15 @@ networks.
 
 -}
 
-import Prelude hiding (filter)
-import Data.Witherable (filter)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, readMVar, putMVar, takeMVar)
 import Control.Lens ((<&>))
 import Control.Monad (forever)
 import Control.Monad.IO.Class (liftIO)
 import Data.Functor (($>), void)
+import Data.Semigroup ((<>))
+import Data.Witherable (filter)
+import Prelude hiding (filter)
 import Reflex
 import Reflex.Host.Basic
 
