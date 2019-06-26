@@ -36,13 +36,11 @@ module Reflex.Host.Basic
   , BasicGuestConstraints
   , basicHostWithQuit
   , basicHostForever
-  , asyncBasicHostWithQuit
   , repeatUntilQuit
   ) where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan (newChan, readChan)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 import Control.Concurrent.STM.TVar (newTVarIO, writeTVar, readTVarIO)
 import Control.Lens ((<&>))
 import Control.Monad (void, when, unless)
@@ -178,40 +176,32 @@ basicHostForever guest = basicHostWithQuit $ (never,) <$> guest
 
 -- | Run a 'BasicGuest', and return when the 'Event' returned by the
 -- 'BasicGuest' fires.
+--
+-- Each guest is run on a separate spider timeline, so you can launch
+-- multiple hosts via 'Control.Concurrent.forkIO' and they will not
+-- mutex each other.
+--
+-- NOTE: You won't see the returned @a@ until after the host
+-- terminates. If you want to capture the result of a build before the
+-- network starts firing (e.g., to hand off event triggers to another
+-- thread), populate an 'MVar' as you build the network.
+--
+-- NOTE 2: Type inference has trouble unifying into the @a@ variable
+-- inside the @BasicGuest t m (Event t (), a)@. You may have to add
+-- more explicit pattern-matches than you are used to. For an example
+-- of this, see the @multithread@ example in this repository.
 basicHostWithQuit
   :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t (), a))
   -> IO a
 basicHostWithQuit guest = do
-  resultVar <- newEmptyMVar
-  asyncBasicHostWithQuit (putMVar resultVar) guest
-  readMVar resultVar
-
--- | Run a 'BasicGuest', but call the given callback with the result
--- of network construction.
---
--- This is useful if you want to fork the event loop into its own
--- thread, and need the result of network construction right away. You
--- could use this to hand off event triggers to another thread, for
--- example. The callback will be called after the network is built,
--- but just before the event loop starts.
---
--- Each guest is run on a separate spider timeline.
---
--- This function terminates when the 'Event' returned by the
--- 'BasicGuest' fires.
-asyncBasicHostWithQuit
-  :: (a -> IO ()) -- ^ Called with the result of network construction
-  -> (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t (), a))
-  -> IO ()
-asyncBasicHostWithQuit onBuild guest =
   withSpiderTimeline $ runSpiderHostForTimeline $ do
     -- Unpack the guest, get the quit event, the result of building the
     -- network, and a function to kick off each frame.
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    performEventChan <- liftIO newChan
+    triggerEventChan <- liftIO newChan
     rHasQuit <- newRef False -- When to shut down
     ((eQuit, a), FireCommand fire) <- hostPerformEventT
-      . flip runTriggerEventT performEventChan
+      . flip runTriggerEventT triggerEventChan
       . flip runPostBuildT postBuild
       $ unBasicGuest guest
 
@@ -221,8 +211,6 @@ asyncBasicHostWithQuit onBuild guest =
         lmQuit <- fire firings $ readEvent hQuit >>= sequenceA
         when (any isJust lmQuit) $ writeRef rHasQuit True
 
-    liftIO $ onBuild a
-
     -- If anyone is listening to PostBuild, fire it
     readRef postBuildTriggerRef
       >>= traverse_ (\t -> runFrameAndCheckQuit [t ==> ()])
@@ -231,7 +219,7 @@ asyncBasicHostWithQuit onBuild guest =
       loop = do
         hasQuit <- readRef rHasQuit
         unless hasQuit $ do
-          eventsAndTriggers <- liftIO $ readChan performEventChan
+          eventsAndTriggers <- liftIO $ readChan triggerEventChan
 
           let
             prepareFiring
@@ -249,6 +237,7 @@ asyncBasicHostWithQuit onBuild guest =
             \(_ :=> TriggerInvocation _ cb) -> cb
           loop
     loop
+    pure a
 
 -- | Augment a 'BasicGuest' with an action that is repeatedly run until
 -- the provided event fires
