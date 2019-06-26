@@ -13,7 +13,7 @@ myNetwork
   -> m (Dynamic t Int)
 myNetwork = count
 
-myGuest :: BasicGuestConstraints t m => BasicGuest t m (Event t (), ())
+myGuest :: BasicGuestConstraints t m => BasicGuest t m (Event t ())
 myGuest = do
   (eTick, sendTick) <- newTriggerEvent
   dCount <- myNetwork eTick
@@ -22,7 +22,7 @@ myGuest = do
     eQuit = () <$ ffilter (==5) eCountUpdated
   repeatUntilQuit (threadDelay 1000000 *> sendTick ()) eQuit
   performEvent_ $ liftIO . print <$> eCountUpdated
-  pure (eQuit, ())
+  pure eQuit
 
 main :: IO ()
 main = basicHostWithQuit myGuest

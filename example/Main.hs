@@ -1,4 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
+
 module Main (main) where
 
 import Control.Monad.IO.Class (liftIO)
@@ -18,4 +19,4 @@ main = basicHostWithQuit $ mdo
 
   performEvent_ $ liftIO . putStrLn <$> eMessage
 
-  pure (eQuit, ())
+  pure eQuit
