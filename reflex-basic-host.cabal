@@ -24,8 +24,8 @@ source-repository    head
 library
   exposed-modules:     Reflex.Host.Basic
   build-depends:       base >=4.9 && <4.13
-                     , dependent-map >= 0.2 && < 0.3
-                     , dependent-sum >= 0.4 && < 0.5
+                     , dependent-map >= 0.2 && < 0.4
+                     , dependent-sum >= 0.4 && < 0.7
                      , lens >= 3.6 && < 4.18
                      , mtl >= 2.2 && < 2.3
                      , primitive >= 0.6 && < 0.7
