@@ -10,11 +10,10 @@ This example boots two reflex networks which we will call "Left" and
 'MVar' and read an event trigger from another 'MVar', so that they can
 fire events into each other's network.
 
-Left and Right both log received lines to stdout. Left also reads
-lines from stdin, and lines are passed around as follows: Left passed
-incoming lines to Right, which immediately sends time a line comes in,
-it sends it to Right. Right immediately sends received lines back to
-Left.
+Left and Right both log to stdout any lines received from each
+other. Left also reads lines from stdin, and lines are passed around
+as follows: Left passes incoming lines to Right, which immediately
+sends received lines back to Left.
 
 If "quit" is read from stdin, this triggers a shutdown of both FRP
 networks.
