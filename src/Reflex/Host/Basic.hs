@@ -21,43 +21,41 @@ For some simple usage examples, see
 
 -}
 
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE UndecidableInstances #-}
-module Reflex.Host.Basic (
-    BasicGuest
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
+
+module Reflex.Host.Basic
+  ( BasicGuest
   , BasicGuestConstraints
   , basicHostWithQuit
   , basicHostForever
   , repeatUntilQuit
   ) where
 
-import Control.Monad (void, when, unless, forM_, forM)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan (newChan, readChan)
-import Data.Functor.Identity (Identity(..))
-import Data.Maybe (catMaybes, isJust)
-
-import Control.Monad.Trans (MonadIO(..), MonadTrans(..))
+import Control.Concurrent.STM.TVar (newTVarIO, writeTVar, readTVarIO)
+import Control.Lens ((<&>))
+import Control.Monad (void, when, unless)
+import Control.Monad.Fix (MonadFix)
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Ref (MonadRef(..))
-import Control.Monad.Fix (MonadFix)
-import Data.IORef (newIORef, readIORef, writeIORef)
-
 import Control.Monad.STM (atomically)
-import Control.Concurrent.STM.TVar (newTVar, writeTVar, readTVar)
-import Control.Concurrent.STM.TMVar (newEmptyTMVar, takeTMVar, putTMVar)
-
-import Data.Dependent.Sum
+import Control.Monad.Trans (MonadIO(..), MonadTrans(..))
+import Data.Dependent.Sum (DSum(..), (==>))
+import Data.Foldable (for_, traverse_)
+import Data.Functor.Identity (Identity)
+import Data.Maybe (catMaybes, isJust)
+import Data.Traversable (for)
 import Reflex
 import Reflex.Host.Class
-import Reflex.NotReady.Class
 
 type BasicGuestConstraints t (m :: * -> *) =
   ( MonadReflexHost t m
@@ -77,7 +75,8 @@ newtype BasicGuest t (m :: * -> *) a =
     unBasicGuest :: PostBuildT t (TriggerEventT t (PerformEventT t m)) a
   } deriving (Functor, Applicative, Monad, MonadFix)
 
-instance (MonadIO m, ReflexHost t, MonadIO (HostFrame t)) => MonadIO (BasicGuest t m) where
+instance (ReflexHost t, MonadIO (HostFrame t)) => MonadIO (BasicGuest t m) where
+  {-# INLINEABLE liftIO #-}
   liftIO = BasicGuest . liftIO
 
 instance ReflexHost t => MonadSample t (BasicGuest t m) where
@@ -87,110 +86,162 @@ instance ReflexHost t => MonadSample t (BasicGuest t m) where
 instance (ReflexHost t, MonadHold t m) => MonadHold t (BasicGuest t m) where
   {-# INLINABLE hold #-}
   hold v0 = BasicGuest . lift . hold v0
+
   {-# INLINABLE holdDyn #-}
   holdDyn v0 = BasicGuest . lift . holdDyn v0
+
   {-# INLINABLE holdIncremental #-}
   holdIncremental v0 = BasicGuest . lift . holdIncremental v0
+
   {-# INLINABLE buildDynamic #-}
   buildDynamic a0 = BasicGuest . lift . buildDynamic a0
+
   {-# INLINABLE headE #-}
   headE = BasicGuest . lift . headE
 
-instance (Reflex t, ReflexHost t) => PostBuild t (BasicGuest t m) where
+instance ReflexHost t => PostBuild t (BasicGuest t m) where
   {-# INLINABLE getPostBuild #-}
   getPostBuild = BasicGuest getPostBuild
 
-instance (Reflex t, ReflexHost t, MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO) => TriggerEvent t (BasicGuest t m) where
+instance
+  ( ReflexHost t
+  , MonadRef (HostFrame t)
+  , Ref (HostFrame t) ~ Ref IO
+  ) => TriggerEvent t (BasicGuest t m) where
+
   {-# INLINABLE newTriggerEvent #-}
   newTriggerEvent = BasicGuest $ lift newTriggerEvent
-  {-# INLINABLE newTriggerEventWithOnComplete #-}
-  newTriggerEventWithOnComplete = BasicGuest $ lift newTriggerEventWithOnComplete
-  {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
-  newEventWithLazyTriggerWithOnComplete = BasicGuest . lift . newEventWithLazyTriggerWithOnComplete
 
-instance (Reflex t, ReflexHost t, Ref m ~ Ref IO, MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO, MonadIO (HostFrame t), PrimMonad (HostFrame t), MonadIO m) => PerformEvent t (BasicGuest t m) where
+  {-# INLINABLE newTriggerEventWithOnComplete #-}
+  newTriggerEventWithOnComplete =
+    BasicGuest $ lift newTriggerEventWithOnComplete
+
+  {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
+  newEventWithLazyTriggerWithOnComplete =
+    BasicGuest . lift . newEventWithLazyTriggerWithOnComplete
+
+instance
+  ( ReflexHost t
+  , Ref m ~ Ref IO
+  , MonadRef (HostFrame t)
+  , Ref (HostFrame t) ~ Ref IO
+  , MonadIO (HostFrame t)
+  , PrimMonad (HostFrame t)
+  , MonadIO m
+  ) => PerformEvent t (BasicGuest t m) where
+
   type Performable (BasicGuest t m) = HostFrame t
+
   {-# INLINABLE performEvent_ #-}
   performEvent_ = BasicGuest . lift . lift . performEvent_
+
   {-# INLINABLE performEvent #-}
   performEvent = BasicGuest . lift . lift . performEvent
 
-instance (Reflex t, ReflexHost t, Ref m ~ Ref IO, MonadHold t m, PrimMonad (HostFrame t)) => Adjustable t (BasicGuest t m) where
+instance
+  ( ReflexHost t
+  , Ref m ~ Ref IO
+  , MonadHold t m
+  , PrimMonad (HostFrame t)
+  ) => Adjustable t (BasicGuest t m) where
+
   {-# INLINABLE runWithReplace #-}
-  runWithReplace a0 a' =
-    BasicGuest $ runWithReplace (unBasicGuest a0) (fmap unBasicGuest a')
+  runWithReplace a0 a' = BasicGuest $
+    runWithReplace (unBasicGuest a0) (fmap unBasicGuest a')
+
   {-# INLINABLE traverseIntMapWithKeyWithAdjust #-}
-  traverseIntMapWithKeyWithAdjust f dm0 dm' = do
-    BasicGuest $ traverseIntMapWithKeyWithAdjust (\k v -> unBasicGuest (f k v)) dm0 dm'
+  traverseIntMapWithKeyWithAdjust f dm0 dm' = BasicGuest $
+    traverseIntMapWithKeyWithAdjust (\k v -> unBasicGuest (f k v)) dm0 dm'
+
   {-# INLINABLE traverseDMapWithKeyWithAdjust #-}
-  traverseDMapWithKeyWithAdjust f dm0 dm' = do
-    BasicGuest $ traverseDMapWithKeyWithAdjust (\k v -> unBasicGuest (f k v)) dm0 dm'
+  traverseDMapWithKeyWithAdjust f dm0 dm' = BasicGuest $
+    traverseDMapWithKeyWithAdjust (\k v -> unBasicGuest (f k v)) dm0 dm'
+
   {-# INLINABLE traverseDMapWithKeyWithAdjustWithMove #-}
-  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = do
-    BasicGuest $ traverseDMapWithKeyWithAdjustWithMove (\k v -> unBasicGuest (f k v)) dm0 dm'
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = BasicGuest $
+    traverseDMapWithKeyWithAdjustWithMove (\k v -> unBasicGuest (f k v)) dm0 dm'
 
-
-instance (ReflexHost t) => NotReady t (BasicGuest t m) where
+instance ReflexHost t => NotReady t (BasicGuest t m) where
   {-# INLINABLE notReadyUntil #-}
   notReadyUntil _ = pure ()
+
   {-# INLINABLE notReady #-}
   notReady = pure ()
 
--- | Run a 'BasicGuest' without a quit 'Event'
-basicHostForever :: (forall t m. BasicGuestConstraints t m => BasicGuest t m a)
-                 -> IO a
-basicHostForever guest = basicHostWithQuit $ (\x -> (x, never)) <$> guest
-
--- | Run a 'BasicGuest'
+-- | Run a 'BasicGuest' without a quit 'Event'.
 --
--- The program will exit when the 'Event' returned by the 'BasicGuest' fires
-basicHostWithQuit :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (a, Event t ()))
-                  -> IO a
-basicHostWithQuit (BasicGuest guest) = do
-  events <- liftIO newChan
+-- @
+-- basicHostForever guest = 'basicHostWithQuit' $ never <$ guest
+-- @
+basicHostForever
+  :: (forall t m. BasicGuestConstraints t m => BasicGuest t m ())
+  -> IO ()
+basicHostForever guest = basicHostWithQuit $ never <$ guest
 
-  rHasQuit <- liftIO $ newIORef False
-
-  ((a, eQuit), FireCommand fire) <- liftIO $ runSpiderHost $ do
-    (((a, eQuit), postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ do
-      (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-      pae <- runTriggerEventT (runPostBuildT guest postBuild) events
-      pure (pae, postBuildTriggerRef)
+-- | Run a 'BasicGuest', and return when the 'Event' returned by the
+-- 'BasicGuest' fires.
+--
+-- Each call runs on a separate spider timeline, so you can launch
+-- multiple hosts via 'Control.Concurrent.forkIO' or
+-- 'Control.Concurrent.forkOS' and they will not mutex each other.
+--
+-- NOTE: If you want to capture values from a build before the network
+-- starts firing (e.g., to hand off event triggers to another thread),
+-- populate an 'Control.Concurrent.MVar' (if threading) or
+-- 'Data.IORef.IORef' as you build the network. If you receive errors
+-- about untouchable type variables while doing this, add type
+-- annotations to constrain the 'Control.Concurrent.MVar' or
+-- 'Data.IORef.IORef' contents before passing them to the function
+-- that returns your 'BasicGuest'. See the @Multithread.hs@ example
+-- for a demonstration of this pattern, and where to put the type
+-- annotations.
+basicHostWithQuit
+  :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t ()))
+  -> IO ()
+basicHostWithQuit guest = do
+  withSpiderTimeline $ runSpiderHostForTimeline $ do
+    -- Unpack the guest, get the quit event, the result of building the
+    -- network, and a function to kick off each frame.
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    triggerEventChan <- liftIO newChan
+    rHasQuit <- newRef False -- When to shut down
+    (eQuit, FireCommand fire) <- hostPerformEventT
+      . flip runTriggerEventT triggerEventChan
+      . flip runPostBuildT postBuild
+      $ unBasicGuest guest
 
     hQuit <- subscribeEvent eQuit
+    let
+      runFrameAndCheckQuit firings = do
+        lmQuit <- fire firings $ readEvent hQuit >>= sequenceA
+        when (any isJust lmQuit) $ writeRef rHasQuit True
 
-    mPostBuildTrigger <- readRef postBuildTriggerRef
-    forM_ mPostBuildTrigger $ \postBuildTrigger -> do
-      lmQuit <- fire [postBuildTrigger :=> Identity ()] $ readEvent hQuit >>= sequence
-      when (any isJust lmQuit) $
-        liftIO $ writeIORef rHasQuit True
+    -- If anyone is listening to PostBuild, fire it
+    readRef postBuildTriggerRef
+      >>= traverse_ (\t -> runFrameAndCheckQuit [t ==> ()])
 
-    pure ((a, eQuit), fc)
+    let
+      loop = do
+        hasQuit <- readRef rHasQuit
+        unless hasQuit $ do
+          eventsAndTriggers <- liftIO $ readChan triggerEventChan
 
-  done <- liftIO . atomically $ newEmptyTMVar
-  let
-    loop = do
-      hasQuit <- liftIO $ readIORef rHasQuit
-      if hasQuit
-      then liftIO . atomically $ putTMVar done ()
-      else do
-        ers <- readChan events
-        _ <- runSpiderHost $ do
-          hQuit <- subscribeEvent eQuit
-          mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation x _) ->
-            fmap (\e -> e :=> Identity x) <$> readIORef er
+          let
+            prepareFiring
+              :: (MonadRef m, Ref m ~ Ref IO)
+              => DSum (EventTriggerRef t) TriggerInvocation
+              -> m (Maybe (DSum (EventTrigger t) Identity))
+            prepareFiring (EventTriggerRef er :=> TriggerInvocation x _)
+              = readRef er <&> fmap (==> x)
 
-          lmQuit <- fire (catMaybes mes) $ readEvent hQuit >>= sequence
-          when (any isJust lmQuit) $
-            liftIO $ writeIORef rHasQuit True
+          catMaybes <$> for eventsAndTriggers prepareFiring
+            >>= runFrameAndCheckQuit
 
-          liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
-        loop
-
-  void . liftIO . forkIO $ loop
-  void . liftIO . atomically . takeTMVar $ done
-
-  pure a
+          -- Fire callbacks for each event we triggered this frame
+          liftIO . for_ eventsAndTriggers $
+            \(_ :=> TriggerInvocation _ cb) -> cb
+          loop
+    loop
 
 -- | Augment a 'BasicGuest' with an action that is repeatedly run until
 -- the provided event fires
@@ -198,7 +249,10 @@ basicHostWithQuit (BasicGuest guest) = do
 -- Example - providing a \'tick\' 'Event' to a network
 --
 -- @
--- myNetwork :: (Reflex t, MonadHold t m, MonadFix m) => Event t () -> m (Dynamic t Int)
+-- myNetwork
+--   :: (Reflex t, MonadHold t m, MonadFix m)
+--   => Event t ()
+--   -> m (Dynamic t Int)
 -- myNetwork eTick = count eTick
 --
 -- myGuest :: BasicGuestConstraints t m => BasicGuest t m ((), Event t ())
@@ -207,7 +261,7 @@ basicHostWithQuit (BasicGuest guest) = do
 --   dCount <- myNetwork eTick
 --   let
 --     eCountUpdated = updated dCount
---     eQuit = () <$ ffilter (==5) eCountUpdated
+--     eQuit = () <$ ffilter (== 5) eCountUpdated
 --   repeatUntilQuit eQuit (threadDelay 1000000 *> sendTick ())
 --   performEvent_ $ liftIO . print \<$\> eCountUpdated
 --   pure ((), eQuit)
@@ -215,22 +269,19 @@ basicHostWithQuit (BasicGuest guest) = do
 -- main :: IO ()
 -- main = basicHostWithQuit myGuest
 -- @
-repeatUntilQuit :: BasicGuestConstraints t m
-                => IO a -- ^ Action to repeatedly run
-                -> Event t () -- ^ 'Event' to stop the action
-                -> BasicGuest t m ()
+repeatUntilQuit
+  :: BasicGuestConstraints t m
+  => IO a -- ^ Action to repeatedly run
+  -> Event t () -- ^ 'Event' to stop the action
+  -> BasicGuest t m ()
 repeatUntilQuit act eQuit = do
   ePostBuild <- getPostBuild
-  tHasQuit <- liftIO . atomically $ newTVar False
+  tHasQuit <- liftIO $ newTVarIO False
 
   let
     loop = do
-      hasQuit <- liftIO . atomically $ readTVar tHasQuit
-      unless hasQuit $ do
-        void act
-        loop
+      hasQuit <- readTVarIO tHasQuit
+      unless hasQuit $ void act *> loop
 
-  performEvent_ $ liftIO (void . forkIO $ loop) <$ ePostBuild
+  performEvent_ $ liftIO (void $ forkIO loop) <$ ePostBuild
   performEvent_ $ liftIO (atomically $ writeTVar tHasQuit True) <$ eQuit
-
-  pure ()

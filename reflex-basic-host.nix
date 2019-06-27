@@ -1,15 +1,19 @@
-{ mkDerivation, base, containers, dependent-sum, mtl, primitive
-, ref-tf, reflex, stdenv, stm, these, time
+{ mkDerivation, base, dependent-map, dependent-sum, lens, mtl
+, primitive, ref-tf, reflex, stdenv, stm, witherable
 }:
 mkDerivation {
   pname = "reflex-basic-host";
-  version = "0.1.0.0";
+  version = "0.2";
   src = ./.;
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base dependent-sum mtl primitive ref-tf reflex stm these
+    base dependent-map dependent-sum lens mtl primitive ref-tf reflex
+    stm
   ];
-  executableHaskellDepends = [ base containers mtl reflex time ];
+  executableHaskellDepends = [
+    base lens mtl ref-tf reflex witherable
+  ];
+  description = "A basic `reflex` host for backend work";
   license = stdenv.lib.licenses.bsd3;
 }
