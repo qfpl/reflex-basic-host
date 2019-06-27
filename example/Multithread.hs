@@ -69,8 +69,8 @@ right mTriggerLeft mTriggerRight = do
   (eFromLeft, triggerRight) <- newTriggerEvent
   liftIO $ putMVar mTriggerRight triggerRight
 
-  -- Get the event trigger for the "lines from Left" event inside the
-  -- Right network, and fire it on each line.
+  -- Get the event trigger for the "lines from Right" event inside the
+  -- Left network, and fire it on each line.
   triggerLeft <- liftIO $ readMVar mTriggerLeft
   performEvent_ $ liftIO . triggerLeft <$> eFromLeft
 
