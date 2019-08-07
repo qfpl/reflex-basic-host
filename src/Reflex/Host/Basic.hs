@@ -27,7 +27,6 @@ For some simple usage examples, see
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
@@ -37,6 +36,7 @@ module Reflex.Host.Basic
   , basicHostWithQuit
   , basicHostForever
   , repeatUntilQuit
+  , repeatUntilQuit_
   ) where
 
 import Control.Concurrent (forkIO)
@@ -198,7 +198,7 @@ basicHostForever guest = basicHostWithQuit $ never <$ guest
 basicHostWithQuit
   :: (forall t m. BasicGuestConstraints t m => BasicGuest t m (Event t ()))
   -> IO ()
-basicHostWithQuit guest = do
+basicHostWithQuit guest =
   withSpiderTimeline $ runSpiderHostForTimeline $ do
     -- Unpack the guest, get the quit event, the result of building the
     -- network, and a function to kick off each frame.
@@ -243,8 +243,9 @@ basicHostWithQuit guest = do
           loop
     loop
 
--- | Augment a 'BasicGuest' with an action that is repeatedly run until
--- the provided event fires
+-- | Augment a 'BasicGuest' with an action that is repeatedly run
+-- until the provided 'Event' fires. Each time the action completes,
+-- the returned 'Event' will fire.
 --
 -- Example - providing a \'tick\' 'Event' to a network
 --
@@ -253,18 +254,18 @@ basicHostWithQuit guest = do
 --   :: (Reflex t, MonadHold t m, MonadFix m)
 --   => Event t ()
 --   -> m (Dynamic t Int)
--- myNetwork eTick = count eTick
+-- myNetwork = count
 --
--- myGuest :: BasicGuestConstraints t m => BasicGuest t m ((), Event t ())
--- myGuest = do
---   (eTick, sendTick) <- newTriggerEvent
---   dCount <- myNetwork eTick
+-- myGuest :: BasicGuestConstraints t m => BasicGuest t m (Event t ())
+-- myGuest = mdo
+--   eTick <- repeatUntilQuit (void $ threadDelay 1000000) eQuit
 --   let
 --     eCountUpdated = updated dCount
---     eQuit = () <$ ffilter (== 5) eCountUpdated
---   repeatUntilQuit eQuit (threadDelay 1000000 *> sendTick ())
+--     eQuit = () <$ ffilter (==5) eCountUpdated
+--   dCount <- myNetwork eTick
+--
 --   performEvent_ $ liftIO . print \<$\> eCountUpdated
---   pure ((), eQuit)
+--   pure eQuit
 --
 -- main :: IO ()
 -- main = basicHostWithQuit myGuest
@@ -273,15 +274,36 @@ repeatUntilQuit
   :: BasicGuestConstraints t m
   => IO a -- ^ Action to repeatedly run
   -> Event t () -- ^ 'Event' to stop the action
-  -> BasicGuest t m ()
+  -> BasicGuest t m (Event t a)
 repeatUntilQuit act eQuit = do
+  ePostBuild <- getPostBuild
+  tHasQuit <- liftIO $ newTVarIO False
+
+  let
+    go fire = loop where
+      loop = do
+        hasQuit <- readTVarIO tHasQuit
+        unless hasQuit $ (act >>= fire) *> loop
+
+  performEvent_ $ liftIO (atomically $ writeTVar tHasQuit True) <$ eQuit
+  performEventAsync $ liftIO . void . forkIO . go <$ ePostBuild
+
+-- | Like 'repeatUntilQuit', but it doesn't do anything with the
+-- result of the action. May be a little more efficient if you don't
+-- need it.
+repeatUntilQuit_
+  :: BasicGuestConstraints t m
+  => IO a -- ^ Action to repeatedly run
+  -> Event t () -- ^ 'Event' to stop the action
+  -> BasicGuest t m ()
+repeatUntilQuit_ act eQuit = do
   ePostBuild <- getPostBuild
   tHasQuit <- liftIO $ newTVarIO False
 
   let
     loop = do
       hasQuit <- readTVarIO tHasQuit
-      unless hasQuit $ void act *> loop
+      unless hasQuit $ act *> loop
 
-  performEvent_ $ liftIO (void $ forkIO loop) <$ ePostBuild
   performEvent_ $ liftIO (atomically $ writeTVar tHasQuit True) <$ eQuit
+  performEvent_ $ liftIO (void $ forkIO loop) <$ ePostBuild

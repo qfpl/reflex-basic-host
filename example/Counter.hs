@@ -1,9 +1,13 @@
-{-# language FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecursiveDo      #-}
+{-# LANGUAGE TypeFamilies     #-}
+
 module Main where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (liftIO)
+import Data.Functor (void)
 import Reflex
 import Reflex.Host.Basic
 
@@ -14,13 +18,13 @@ myNetwork
 myNetwork = count
 
 myGuest :: BasicGuestConstraints t m => BasicGuest t m (Event t ())
-myGuest = do
-  (eTick, sendTick) <- newTriggerEvent
-  dCount <- myNetwork eTick
+myGuest = mdo
+  eTick <- repeatUntilQuit (void $ threadDelay 1000000) eQuit
   let
     eCountUpdated = updated dCount
     eQuit = () <$ ffilter (==5) eCountUpdated
-  repeatUntilQuit (threadDelay 1000000 *> sendTick ()) eQuit
+  dCount <- myNetwork eTick
+
   performEvent_ $ liftIO . print <$> eCountUpdated
   pure eQuit
 
