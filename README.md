@@ -2,8 +2,19 @@
 
 A basic `reflex` host for backend work.
 
-For some simple usage examples, see
-[the examples directory](https://github.com/qfpl/reflex-basic-host/tree/master/example)
+## Getting Started
+
+The main entry point is `Reflex.Host.Basic.basicHostWithQuit`. The
+`BasicGuest` type that it expects instances for most of the important
+Reflex typeclasses. To create your own `Event`s, use functions from by
+`Reflex.TriggerEvent`. To peform side-effects, use functions from
+`Reflex.PerformEvent` - `Performable (BasicGuest t m)` has a `MonadIO`
+instance.
+
+## Examples
+
+For some usage examples, see [the example
+directory](https://github.com/qfpl/reflex-basic-host/tree/master/example)
 
 ## Contribution
 
