@@ -1,6 +1,6 @@
-# changelog
+# ChangeLog
 
-## 0.2
+## 0.2 - 2019-08-29
 
 * Added `Reflex.Host.Basic.repeatUntilQuit_`, with the same behaviour
   as 0.1's `Reflex.Host.Basic.repeatUntilQuit`.
