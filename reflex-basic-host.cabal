@@ -28,9 +28,9 @@ library
                      , dependent-sum >= 0.4 && < 0.7
                      , lens >= 3.6 && < 4.18
                      , mtl >= 2.2 && < 2.3
-                     , primitive >= 0.6 && < 0.7
+                     , primitive >= 0.6 && < 0.8
                      , ref-tf >= 0.4 && < 0.5
-                     , reflex >= 0.5 && < 0.7
+                     , reflex >= 0.6 && < 0.7
                      , stm >= 2.4 && < 2.6
   hs-source-dirs:      src
   ghc-options:         -Wall
@@ -40,7 +40,7 @@ executable example
   main-is:             Main.hs
   build-depends:       base >=4.9 && <4.13
                      , mtl >= 2.2 && < 2.3
-                     , reflex >= 0.5 && < 0.7
+                     , reflex >= 0.6 && < 0.7
                      , reflex-basic-host
   hs-source-dirs:      example
   ghc-options:         -Wall
@@ -50,7 +50,7 @@ executable counter
   main-is:             Counter.hs
   build-depends:       base >=4.9 && <4.13
                      , mtl >= 2.2 && < 2.3
-                     , reflex >= 0.5 && < 0.7
+                     , reflex >= 0.6 && < 0.7
                      , reflex-basic-host
   hs-source-dirs:      example
   ghc-options:         -Wall
@@ -62,7 +62,7 @@ executable multithread
                      , lens >= 3.6 && < 4.18
                      , mtl >= 2.2 && < 2.3
                      , ref-tf >= 0.4 && < 0.5
-                     , reflex >= 0.5 && < 0.7
+                     , reflex >= 0.6 && < 0.7
                      , reflex-basic-host
                      , witherable >= 0.2 && < 0.4
   hs-source-dirs:      example
