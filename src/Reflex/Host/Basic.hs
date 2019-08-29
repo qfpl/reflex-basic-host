@@ -16,8 +16,8 @@ Maintainer  : dave.laing.80@gmail.com
 * 'TriggerEvent'
 * 'Adjustable'
 
-For some simple usage examples, see
-<https://github.com/qfpl/reflex-basic-host/tree/master/example the examples directory>
+For some usage examples, see
+<https://github.com/qfpl/reflex-basic-host/tree/master/example the example directory>
 
 -}
 
