@@ -1,5 +1,7 @@
 # reflex-basic-host
 
+[![Build Status](https://travis-ci.org/qfpl/reflex-basic-host.svg?branch=master)](https://travis-ci.org/qfpl/reflex-basic-host)
+
 A basic `reflex` host for backend work.
 
 ## Getting Started
