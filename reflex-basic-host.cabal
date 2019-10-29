@@ -20,9 +20,8 @@ description:
   .
   @Reflex.Host.Basic.basicHostWithQuit@ is the main entry point for
   running FRP code. Use the @TriggerEvent@ instance to construct
-  @Event@s and control when they fire firings, and use the
-  @PerformEvent@ instance to take actions in response to @Event@
-  firings.
+  @Event@s and control when they fire, and use the @PerformEvent@
+  instance to take actions in response to @Event@ firings.
 
 tested-with:         GHC == 8.0.2
                    , GHC == 8.2.2

@@ -17,7 +17,7 @@ Maintainer  : dave.laing.80@gmail.com, jack.kelly@data61.csiro.au
 * 'Adjustable'
 
 For some usage examples, see
-<https://github.com/qfpl/reflex-basic-host/tree/master/example the example directory>
+<https://github.com/qfpl/reflex-basic-host/tree/master/example the example directory>.
 
 -}
 
@@ -31,10 +31,16 @@ For some usage examples, see
 {-# LANGUAGE UndecidableInstances       #-}
 
 module Reflex.Host.Basic
-  ( BasicGuest
-  , BasicGuestConstraints
-  , basicHostWithQuit
+  (
+  -- * Running the host
+    basicHostWithQuit
   , basicHostForever
+
+  -- * Types
+  , BasicGuest
+  , BasicGuestConstraints
+
+  -- * Utilities
   , repeatUntilQuit
   , repeatUntilQuit_
   ) where
@@ -57,6 +63,8 @@ import Data.Traversable (for)
 import Reflex
 import Reflex.Host.Class
 
+-- | Constraints provided by a 'BasicGuest', when run by
+-- 'basicHostWithQuit'/'basicHostForever'.
 type BasicGuestConstraints t (m :: * -> *) =
   ( MonadReflexHost t m
   , MonadHold t m
@@ -70,6 +78,12 @@ type BasicGuestConstraints t (m :: * -> *) =
   , MonadFix m
   )
 
+-- | The basic guest type. Try not to code against it directly;
+-- instead ask for the features you need MTL-style:
+--
+-- @
+-- myFunction :: (Reflex t, MonadHold m) => ...
+-- @
 newtype BasicGuest t (m :: * -> *) a =
   BasicGuest {
     unBasicGuest :: PostBuildT t (TriggerEventT t (PerformEventT t m)) a
@@ -181,7 +195,7 @@ basicHostForever guest = basicHostWithQuit $ never <$ guest
 -- | Run a 'BasicGuest', and return when the 'Event' returned by the
 -- 'BasicGuest' fires.
 --
--- Each call runs on a separate spider timeline, so you can launch
+-- Each host runs on a separate spider timeline, so you can launch
 -- multiple hosts via 'Control.Concurrent.forkIO' or
 -- 'Control.Concurrent.forkOS' and they will not mutex each other.
 --
