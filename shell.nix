@@ -1,12 +1,13 @@
-{ nixpkgs ? import <nixpkgs> {} } :
+{ nixpkgs ? import ./nix/nixpkgs.nix
+, compiler ? "default"
+, doBenchmark ? false
+}:
 let
   inherit (nixpkgs) pkgs;
-  reflex-platform = import ./nix/reflex-platform.nix;
-  drv = import ./. { inherit reflex-platform; };
+  env = (import ./. { inherit nixpkgs compiler doBenchmark; }).env;
 in
-  if pkgs.lib.inNixShell then drv.env.overrideAttrs (oldAttrs: {
+  env.overrideAttrs (oldAttrs: {
     buildInputs = with pkgs.haskellPackages; oldAttrs.buildInputs ++ [
-      cabal-install ghcid
+      cabal-install cabal2nix ghcid
     ];
   })
-  else drv

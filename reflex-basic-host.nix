@@ -1,5 +1,5 @@
-{ mkDerivation, base, dependent-map, dependent-sum, lens, mtl
-, primitive, ref-tf, reflex, stdenv, stm, witherable
+{ mkDerivation, base, dependent-sum, lens, mtl, primitive, ref-tf
+, reflex, stdenv, stm, witherable
 }:
 mkDerivation {
   pname = "reflex-basic-host";
@@ -8,12 +8,10 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base dependent-map dependent-sum lens mtl primitive ref-tf reflex
-    stm
+    base dependent-sum lens mtl primitive ref-tf reflex stm
   ];
-  executableHaskellDepends = [
-    base lens mtl ref-tf reflex witherable
-  ];
-  description = "A basic `reflex` host for backend work";
+  executableHaskellDepends = [ base lens reflex witherable ];
+  homepage = "https://github.com/qfpl/reflex-basic-host/";
+  description = "A basic Reflex host for backend work";
   license = stdenv.lib.licenses.bsd3;
 }
