@@ -64,7 +64,7 @@ import Reflex
 import Reflex.Host.Class
 
 -- | Constraints provided by a 'BasicGuest', when run by
--- 'basicHostWithQuit'/'basicHostForever'.
+-- 'basicHostWithQuit' or 'basicHostForever'.
 type BasicGuestConstraints t (m :: * -> *) =
   ( MonadReflexHost t m
   , MonadHold t m
