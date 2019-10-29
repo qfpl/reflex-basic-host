@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.0.1 - 2019-10-29
+
+* Documentation fixups.
+* Removed redundant dependencies from cabal file.
+
 ## 0.2 - 2019-10-28
 
 * Added `Reflex.Host.Basic.repeatUntilQuit_`, with the same behaviour

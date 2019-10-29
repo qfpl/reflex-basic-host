@@ -4,7 +4,7 @@ Copyright   : (c) 2019 Commonwealth Scientific and Industrial Research Organisat
 License     : BSD-3
 Maintainer  : dave.laing.80@gmail.com, jack.kelly@data61.csiro.au
 
-'BasicGuest' provides instances that most `reflex` programs need:
+'BasicGuest' provides instances that most Reflex programs need:
 
 * 'MonadIO'
 * 'MonadFix'
