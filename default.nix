@@ -12,13 +12,10 @@ let
 
   haskellPackages = baseHaskellPackages.override {
     overrides = self: super: with pkgs.haskell.lib; {
-      # Required by reflex
-      dependent-map = super.dependent-map_0_3;
-      dependent-sum = super.dependent-sum_0_6_2_0;
-      monoidal-containers = super.monoidal-containers_0_6;
       witherable = super.callHackage "witherable" "0.3.1" {};
 
-      reflex = enableCabalFlag (unmarkBroken super.reflex) "split-these";
+      patch = unmarkBroken super.patch;
+      reflex = unmarkBroken super.reflex;
     };
   };
 
