@@ -1,3 +1,10 @@
+# THIS LIBRARY IS DEPRECATED
+
+Since `reflex-0.7.1.0`, there is a
+[`Reflex.Host.Headless`](https://hackage.haskell.org/package/reflex-0.7.1.0/docs/Reflex-Host-Headless.html)
+module in mainline Reflex, which allows you to do the same things as
+`reflex-basic-host`.
+
 # reflex-basic-host
 
 [![Build Status](https://travis-ci.org/qfpl/reflex-basic-host.svg?branch=master)](https://travis-ci.org/qfpl/reflex-basic-host)
