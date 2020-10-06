@@ -144,13 +144,17 @@ instance
   , MonadIO m
   ) => PerformEvent t (BasicGuest t m) where
 
-  type Performable (BasicGuest t m) = HostFrame t
+  type Performable (BasicGuest t m) = TriggerEventT t (HostFrame t)
 
   {-# INLINABLE performEvent_ #-}
-  performEvent_ = BasicGuest . lift . lift . performEvent_
+  performEvent_ x = BasicGuest $ do
+    evs <- lift askEvents
+    lift . lift . performEvent_ $ (flip runTriggerEventT evs) <$> x
 
   {-# INLINABLE performEvent #-}
-  performEvent = BasicGuest . lift . lift . performEvent
+  performEvent x = BasicGuest $ do
+    evs <- lift askEvents
+    lift . lift . performEvent $ (flip runTriggerEventT evs) <$> x
 
 instance
   ( ReflexHost t
